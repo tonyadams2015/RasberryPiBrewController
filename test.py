@@ -25,7 +25,8 @@ class Thermometer():
         temperature = float(temperaturedata[2:])/1000
         return temperature
 
-# Heat control mode  s
+
+# Heat control modes
 class ControlMode():
     off = 0
     on = 1
@@ -205,7 +206,6 @@ class BrewControllerGui():
 
         # Hook up callbacks for gui events
         self.event_cb = event_cb
-        
 
     def init_frame(self):
         self.frm = Frame(root, relief = RIDGE, borderwidth = 5)
@@ -253,13 +253,11 @@ class BrewControllerGui():
         self.temp_input_pwm = Spinbox(self.frm, from_ = 10, to = 100, textvariable = self.pwm_target, command = self.pwm_input_target_cb)
         self.temp_input_pwm.config(width = 5, font = ("Purisa", 15))
 	self.temp_input_pwm.grid(row = 16, column = 1, sticky = "we")
-
 	self.label_delay_time = Label(self.frm, text = "Delay Timer", font = ("Purisa", 15))
         self.label_delay_time.grid(row = 17, column = 0, sticky = "w")
         self.input_delay_time = Spinbox(self.frm, from_ = 10, to = 100, textvariable = self.delay_time, command = self.input_delay_time_cb)
         self.input_delay_time.config(width = 5, font = ("Purisa", 15))
 	self.input_delay_time.grid(row = 17, column = 1, sticky = "we")
-
 
     def btn_tc_update(self, is_stopping):
         self.btn_tc.select()
@@ -310,12 +308,17 @@ class BrewControllerGui():
 
     def input_delay_time_cb(self):
         self.event_cb(Events.set_timer, float(self.delay_time.get()))
+        self.temp_controller.set_target(self.temp_target.get())
+
+    def pwm_input_target_cb(self):
+        self.pwm_controller.set_target(float(self.pwm_target.get()) / 100)
+        
 
 # Statemachine
 class Statemachine():
     def __init__(self, start_state, next_cb):
         self._state = start_state
-        self.next_cb = next_cb 
+        self.next_cb = next_cb
 
     def next(self, next_state):
         self._state = next_state
