@@ -25,7 +25,7 @@ class Thermometer():
         temperature = float(temperaturedata[2:])/1000
         return temperature
 
-# Heat control modes
+# Heat control mode  s
 class ControlMode():
     off = 0
     on = 1
