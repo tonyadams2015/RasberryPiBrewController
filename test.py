@@ -41,9 +41,11 @@ class ControlState():
     tc = 1
     tc_stopping = 2
     tc_delayed = 3
-    pwm = 4
-    pwm_stopping = 5
-    pwm_delayed = 6
+    tc_delayed_stopping = 4
+    pwm = 5
+    pwm_stopping = 6
+    pwm_delayed = 7
+    pwm_delayed_stopping = 8
 
 class Events():
     btn_off = 0
@@ -55,7 +57,9 @@ class Events():
     timer_expired = 6
     set_tc = 7
     set_pwm = 8
-    set_timer = 9
+    set_pwm_delay_time = 9
+    set_tc_delay_time = 10
+    timer_stopped = 11
 
 # Controller base class
 class Controller():
@@ -156,10 +160,11 @@ class PwmControl(Controller):
 
 # Timer
 class Timer():
-    def __init__(self, expire_cb):
+    def __init__(self, expire_cb, stopped_cb):
         self.i = 1
         self.seconds = 0
         self.expire_cb = expire_cb
+        self.stopped_cb = stopped_cb
 
     def start(self, seconds):
         print "delay timer starting"
@@ -170,6 +175,7 @@ class Timer():
     def stop(self):
         print "stop delay timer"
         self.seconds = 0
+        self.stopped_cb(Events.timer_stopped)
  
     def is_running(self):
         try:
@@ -294,6 +300,30 @@ class BrewControllerGui():
     def temp_btn_pwm_cb(self):
         self.event_cb(Events.btn_pwm)
 
+    def btn_pwm_enable(self, enable):
+        if (enable):
+            self.btn_pwm.config(state = NORMAL)
+        else:
+            self.btn_pwm.config(state = DISABLED)
+
+    def btn_tc_enable(self, enable):
+        if (enable):
+            self.btn_tc.config(state = NORMAL)
+        else:
+            self.btn_tc.config(state = DISABLED) 
+
+    def btn_tc_delay_enable(self, enable):
+        if (enable):
+            self.btn_tc_delay.config(state = NORMAL)
+        else:
+            self.btn_tc_delay.config(state = DISABLED) 
+
+    def btn_pwm_delay_enable(self, enable):
+        if (enable):
+            self.btn_pwm_delay.config(state = NORMAL)
+        else:
+            self.btn_pwm_delay.config(state = DISABLED) 
+
     def temp_btn_pwm_delay_cb(self):
         self.event_cb(Events.btn_pwm_delay)
         
@@ -301,18 +331,14 @@ class BrewControllerGui():
 	self.event_cb(Events.btn_off)
 
     def temp_input_target_cb(self):
-        self.event_cb(Events.set_tc, self.temp_target.get)
+        self.event_cb(Events.set_tc, self.temp_target.get())
 
     def pwm_input_target_cb(self):
         self.event_cb(Events.set_pwm, float(self.pwm_target.get()) / 100)
 
     def input_delay_time_cb(self):
-        self.event_cb(Events.set_timer, float(self.delay_time.get()))
-        self.temp_controller.set_target(self.temp_target.get())
-
-    def pwm_input_target_cb(self):
-        self.pwm_controller.set_target(float(self.pwm_target.get()) / 100)
-        
+        self.event_cb(Events.set_pwm_delay_time, float(self.delay_time.get()))
+        self.event_cb(Events.set_tc_delay_time, float(self.delay_time.get()))        
 
 # Statemachine
 class Statemachine():
@@ -339,14 +365,17 @@ class BrewController():
         self.gui = BrewControllerGui(0, kwargs['name'], kwargs['device_id'] , self.process_event)
         self.temp_controller = TempControl(self.process_event, kwargs['device_id'])
         self.pwm_controller = PwmControl(self.process_event)
-        self.pwm_delay_timer = Timer(self.process_event)
-        self.tc_delay_timer = Timer(self.process_event)
+        self.pwm_delay_timer = Timer(self.process_event, self.process_event)
+        self.tc_delay_timer = Timer(self.process_event, self.process_event)
 
         # Init defaults
         self.default_tc_target = kwargs['tc_default']
         self.default_pwm_target = kwargs['pwm_default']
         self.default_delay_time = kwargs['delay_time_default']
         self.init_defaults()
+
+        self.pwm_delay_time = self.default_delay_time
+        self.tc_delay_time = self.default_delay_time
         
         root.protocol("WM_DELETE_WINDOW", self.close_cb)
 
@@ -361,11 +390,14 @@ class BrewController():
         elif (event == Events.set_pwm):
            self.pwm_controller.set_target(args[0])
            return
-        elif (event == Events.set_timer):
-           self.time_delay = args[0]
+        elif (event == Events.set_pwm_delay_time):
+           self.pwm_delay_time = args[0]
+           return
+        elif (event == Events.set_tc_delay_time):
+           self.tc_delay_time = args[0]
            return
         
-        if (self.sm.state == ControlState.off):
+        if (self.sm.state == ControlState.off): 
             if (event == Events.btn_tc):
                 self.sm.next(ControlState.tc)
             elif (event == Events.btn_pwm):
@@ -384,10 +416,14 @@ class BrewController():
                 self.sm.next(ControlState.off)
 
         elif (self.sm.state == ControlState.tc_delayed):
-            if (event == Events.btn_tc_delay):
-                self.sm.next(ControlState.tc_delayed)
+            if (event == Events.btn_off):
+                self.sm.next(ControlState.tc_delayed_stopping)
             elif (event == Events.timer_expired):
                 self.sm.next(ControlState.tc)
+
+        elif (self.sm.state == ControlState.tc_delayed_stopping):
+            if (event == Events.timer_stopped):
+                self.sm.next(ControlState.off)
                 
         elif (self.sm.state == ControlState.pwm):
             if (event == Events.btn_off):
@@ -398,38 +434,66 @@ class BrewController():
                 self.sm.next(ControlState.off)
 
         elif (self.sm.state == ControlState.pwm_delayed):
-            if (event == Events.btn_pwm_delay):
-                self.sm.next(ControlState.pwm_delayed)
+            if (event == Events.btn_off):
+                self.sm.next(ControlState.pwm_delayed_stopping)
             elif (event == Events.timer_expired):
                 self.sm.next(ControlState.pwm)
 
+        elif (self.sm.state == ControlState.pwm_delayed_stopping):
+            if (event == Events.timer_stopped):
+                self.sm.next(ControlState.off)
+                
     def init_state(self):
         if (self.sm.state == ControlState.tc):
             self.temp_controller.start()
             self.gui.btn_tc_update(0)
+            self.gui.btn_pwm_enable(0)
+            self.gui.btn_tc_delay_enable(0)
+            self.gui.btn_pwm_delay_enable(0)
             
         elif (self.sm.state == ControlState.tc_stopping):
             self.temp_controller.stop()
             self.gui.btn_tc_update(1)
 
         elif (self.sm.state == ControlState.tc_delayed):
-            self.tc_delay_timer.start(int(self.default_delay_time))
+            self.tc_delay_timer.start(int(self.tc_delay_time))
+            self.gui.btn_pwm_enable(0)
+            self.gui.btn_tc_enable(0)
+            self.gui.btn_pwm_delay_enable(0)
+            self.gui.btn_tc_delay_enable(0)
+
+        elif (self.sm.state == ControlState.tc_delayed_stopping):
+            self.tc_delay_timer.stop()
 
         elif (self.sm.state == ControlState.pwm):
             self.pwm_controller.start()
             self.gui.btn_pwm_update(0)
+            self.gui.btn_tc_enable(0)
+            self.gui.btn_tc_delay_enable(0)
+            self.gui.btn_pwm_delay_enable(0)
 
         elif (self.sm.state == ControlState.pwm_stopping):
             self.pwm_controller.stop()
             self.gui.btn_pwm_update(1)
 
         elif (self.sm.state == ControlState.pwm_delayed):
-            self.pwm_delay_timer.start(int(self.default_delay_time))
-   
+            self.pwm_delay_timer.start(int(self.pwm_delay_time))
+            self.gui.btn_pwm_enable(0)
+            self.gui.btn_tc_enable(0)
+            self.gui.btn_pwm_delay_enable(0)
+            self.gui.btn_tc_delay_enable(0)           
+
+        elif (self.sm.state == ControlState.pwm_delayed_stopping):
+            self.pwm_delay_timer.stop()
+
         elif (self.sm.state == ControlState.off):
             self.gui.btn_tc_update(0)
             self.gui.btn_pwm_update(0)
             self.gui.btn_off_update()
+            self.gui.btn_pwm_enable(1)
+            self.gui.btn_tc_enable(1)
+            self.gui.btn_pwm_delay_enable(1)
+            self.gui.btn_tc_delay_enable(1)
 
     def turn_off_everything(self):
 	self.temp_controller.stop()
