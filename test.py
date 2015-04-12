@@ -213,6 +213,11 @@ class BrewControllerGui():
         # Hook up callbacks for gui events
         self.event_cb = event_cb
 
+        # Start temp read thread
+        self.thermometer = Thermometer(self.device_id)
+        self.th = Thread(target = self.read_temp)
+        self.th.start()
+
     def init_frame(self):
         self.frm = Frame(root, relief = RIDGE, borderwidth = 5)
         self.frm.grid(row = 0, column = self.col_offset, sticky = "w")
@@ -338,7 +343,11 @@ class BrewControllerGui():
 
     def input_delay_time_cb(self):
         self.event_cb(Events.set_pwm_delay_time, float(self.delay_time.get()))
-        self.event_cb(Events.set_tc_delay_time, float(self.delay_time.get()))        
+        self.event_cb(Events.set_tc_delay_time, float(self.delay_time.get()))
+
+    def read_temp(self):
+        while(1):
+            self.t.set(round(self.thermometer.read_temp(),1))
 
 # Statemachine
 class Statemachine():
@@ -542,6 +551,7 @@ class Gui():
         self.init_tc_delay_timer()
 
         # Start temp read thread
+        self.thermometer = Thermometer(device_id)
         self.th = Thread(target = self.read_temp)
         self.th.start()
 
