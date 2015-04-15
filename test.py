@@ -46,6 +46,7 @@ class ControlState():
     pwm_stopping = 6
     pwm_delayed = 7
     pwm_delayed_stopping = 8
+    disabled = 9
 
 class Events():
     btn_off = 0
@@ -60,6 +61,8 @@ class Events():
     set_pwm_delay_time = 9
     set_tc_delay_time = 10
     timer_stopped = 11
+    enable = 12
+    disable =13
 
 # Controller base class
 class Controller():
@@ -209,6 +212,7 @@ class BrewControllerGui():
         self.init_temp()
         self.init_control_btns()
         self.init_temp_inputs()
+        self.init_btn_enable()
 
         # Hook up callbacks for gui events
         self.event_cb = event_cb
@@ -222,33 +226,41 @@ class BrewControllerGui():
         self.frm = Frame(root, relief = RIDGE, borderwidth = 5)
         self.frm.grid(row = 0, column = self.col_offset, sticky = "w")
         self.title = Label(self.frm, text = self.name, font = ("Purisa", 50))
-        self.title.grid(row = 0, column = 0, stick = "w")
+        self.title.grid(row = 0, column = 0, columnspan = 2 ,stick = "w")
+
+    def init_btn_enable(self):
+        self.enable = IntVar()
+        self.enable.set(0)
+        self.btn_enable =  Checkbutton(self.frm, variable = self.enable, command = self.btn_enable_cb)
+        self.btn_enable.config(text = "Enable", font = ("Purisa", 16))
+        self.btn_enable.grid(row = 0, column = 1)
+        self.enable_all(0)
 
     def init_temp(self):
         self.temp = Label(self.frm, textvariable = self.t)
-        self.temp.config(relief = FLAT, borderwidth = 5, font = ("Purisa", 75))
-        self.temp.grid(row = 3, column = 0, columnspan = 2, rowspan = 5, stick = "w")
+        self.temp.config(relief = FLAT, borderwidth = 5, font = ("Purisa", 50))
+        self.temp.grid(row = 4, column = 0, columnspan = 3, rowspan = 5, stick = "w")
         
     def init_control_btns(self):
         self.btn_var = IntVar()
         self.btn_tc =  Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.tc, command = self.temp_btn_tc_cb)
-        self.btn_tc.config(width = 20, text = "Temperature Control", indicatoron = 0, font = ("Purisa", 20))
-        self.btn_tc.grid(row = 10, column = 0, sticky = "we", columnspan = 3)
+        self.btn_tc.config(text = "Temp Control", indicatoron = 0, font = ("Purisa", 17))
+        self.btn_tc.grid(row = 10, column = 0, sticky = "we", columnspan = 2)
         self.btn_pwm = Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.pwm, command = self.temp_btn_pwm_cb)
-        self.btn_pwm.config(width = 20, text = "PWM", indicatoron = 0, font = ("Purisa", 20))
-	self.btn_pwm.grid(row = 11, column = 0, sticky = "we", columnspan = 3)
+        self.btn_pwm.config(text = "PWM", indicatoron = 0, font = ("Purisa", 17))
+	self.btn_pwm.grid(row = 11, column = 0, sticky = "we", columnspan = 2)
 
         self.btn_tc_delay =  Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.tc_delayed, command = self.temp_btn_tc_delay_cb)
-        self.btn_tc_delay.config(width = 20, text = "Temperature Control Later", indicatoron = 0, font = ("Purisa", 20))
-        self.btn_tc_delay.grid(row = 12, column = 0, sticky = "we", columnspan = 3)
+        self.btn_tc_delay.config(text = "Temp Control Later", indicatoron = 0, font = ("Purisa", 17))
+        self.btn_tc_delay.grid(row = 12, column = 0, sticky = "we", columnspan = 2)
 
         self.btn_pwm_delay = Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.pwm_delayed, command = self.temp_btn_pwm_delay_cb)
-	self.btn_pwm_delay.config(width = 25,text = "PWM Later ", indicatoron = 0, font = ("Purisa", 20))
-        self.btn_pwm_delay.grid(row = 13, column = 0, sticky = "we", columnspan = 3)
+	self.btn_pwm_delay.config(width = 25,text = "PWM Later ", indicatoron = 0, font = ("Purisa", 17))
+        self.btn_pwm_delay.grid(row = 13, column = 0, sticky = "we", columnspan = 2)
 
         self.btn_off = Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.off, command = self.temp_btn_off_cb)
-	self.btn_off.config(width = 20,text = "Off", indicatoron = 0, font = ("Purisa", 20))
-        self.btn_off.grid(row = 14, column = 0, sticky = "we", columnspan = 3, pady = (0,20)) 
+	self.btn_off.config(width = 20,text = "Off", indicatoron = 0, font = ("Purisa", 17))
+        self.btn_off.grid(row = 14, column = 0, sticky = "we", columnspan = 2, pady = (0,20)) 
         
     def init_temp_inputs(self):
         self.temp_target = IntVar()
@@ -315,7 +327,7 @@ class BrewControllerGui():
         if (enable):
             self.btn_tc.config(state = NORMAL)
         else:
-            self.btn_tc.config(state = DISABLED) 
+            self.btn_tc.config(state = DISABLED)
 
     def btn_tc_delay_enable(self, enable):
         if (enable):
@@ -329,6 +341,22 @@ class BrewControllerGui():
         else:
             self.btn_pwm_delay.config(state = DISABLED) 
 
+    def enable_all(self, enable):
+        self.btn_pwm_enable(enable)
+        self.btn_tc_enable(enable)
+        self.btn_tc_delay_enable(enable)
+        self.btn_pwm_delay_enable(enable)
+
+        if (enable == 0):
+            self.btn_tc.deselect()
+        
+
+    def btn_enable_cb(self):
+        if (self.enable.get() == 1):
+            self.event_cb(Events.enable)
+        else:
+            self.event_cb(Events.disable)
+        
     def temp_btn_pwm_delay_cb(self):
         self.event_cb(Events.btn_pwm_delay)
         
@@ -371,7 +399,7 @@ class BrewController():
     def __init__(self, **kwargs):
         # Init objects
         self.sm = Statemachine(ControlState.off, self.init_state)
-        self.gui = BrewControllerGui(0, kwargs['name'], kwargs['device_id'] , self.process_event)
+        self.gui = BrewControllerGui(kwargs['col_offset'], kwargs['name'], kwargs['device_id'] , self.process_event)
         self.temp_controller = TempControl(self.process_event, kwargs['device_id'])
         self.pwm_controller = PwmControl(self.process_event)
         self.pwm_delay_timer = Timer(self.process_event, self.process_event)
@@ -387,6 +415,9 @@ class BrewController():
         self.tc_delay_time = self.default_delay_time
         
         root.protocol("WM_DELETE_WINDOW", self.close_cb)
+
+        # Init state
+        self.sm.next(ControlState.disabled)
 
     def process_event(self, event, *args):
 
@@ -405,9 +436,18 @@ class BrewController():
         elif (event == Events.set_tc_delay_time):
            self.tc_delay_time = args[0]
            return
-        
-        if (self.sm.state == ControlState.off): 
-            if (event == Events.btn_tc):
+
+        # Disable works from any state
+        if (event == Events.disable):
+            self.sm.next(ControlState.disabled)
+
+        # Process events that depend on state
+        if (self.sm.state == ControlState.disabled):
+            if (event == Events.enable):
+                self.sm.next(ControlState.off)
+                
+        elif (self.sm.state == ControlState.off): 
+            if (event == Events.btn_tc):  
                 self.sm.next(ControlState.tc)
             elif (event == Events.btn_pwm):
                 self.sm.next(ControlState.pwm)
@@ -499,15 +539,17 @@ class BrewController():
             self.gui.btn_tc_update(0)
             self.gui.btn_pwm_update(0)
             self.gui.btn_off_update()
-            self.gui.btn_pwm_enable(1)
-            self.gui.btn_tc_enable(1)
-            self.gui.btn_pwm_delay_enable(1)
-            self.gui.btn_tc_delay_enable(1)
+            self.gui.enable_all(1)
+
+        elif (self.sm.state == ControlState.disabled):
+            self.gui.enable_all(0)
+            self.turn_off_everything()
 
     def turn_off_everything(self):
 	self.temp_controller.stop()
 	self.pwm_controller.stop()
 	self.pwm_delay_timer.stop()
+	self.tc_delay_timer.stop()
 
     # Handle window close
     def close_cb(self):
@@ -521,7 +563,9 @@ class BrewController():
         self.pwm_controller.set_target(float(self.default_pwm_target) / 100)
         self.temp_controller.set_target(int(self.default_tc_target))
         
-b = BrewController(name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
+hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
+kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
+mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
 
        
 
