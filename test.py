@@ -66,11 +66,12 @@ class Events():
 
 # Controller base class
 class Controller():
-    def __init__(self, stopped_cb):
+    def __init__(self, stopped_cb, heat_cb):
         self.target = 0
         self.mode = ControlMode.off
         self.turned_on = 0
         self.stopped_cb = stopped_cb
+        self.heat_cb = heat_cb
 
     def set_target(self, target):
         self.target = target
@@ -112,6 +113,7 @@ class Controller():
 	    pifacedigital.output_pins[6].turn_on()
             print "turn heat on"
 	    self.turned_on = 1
+	    self.heat_cb(1)
 
     def turn_off(self):
         self.turned_on = 0
@@ -122,12 +124,13 @@ class Controller():
         time.sleep(0.05) 
 	pifacedigital.output_pins[6].turn_off()
         print "turning heat off"
+        self.heat_cb(0)
 
 
 # Temperature Control
 class TempControl(Controller):
-    def __init__(self, stopped_cb, device_id):
-        Controller.__init__(self, stopped_cb)
+    def __init__(self, stopped_cb, heat_cb, device_id):
+        Controller.__init__(self, stopped_cb, heat_cb)
 	self.deadband = 0.5
         self.temp = 0
         self.thermometer = Thermometer(device_id)
@@ -148,8 +151,8 @@ class TempControl(Controller):
         
 # PWM Control
 class PwmControl(Controller):
-    def __init__(self, stopped_cb):
-        Controller.__init__(self, stopped_cb)
+    def __init__(self, stopped_cb, heat_cb):
+        Controller.__init__(self, stopped_cb, heat_cb)
         self.period = 4
 	        
     def control(self):
@@ -213,6 +216,7 @@ class BrewControllerGui():
         self.init_control_btns()
         self.init_temp_inputs()
         self.init_btn_enable()
+        self.init_status()
 
         # Hook up callbacks for gui events
         self.event_cb = event_cb
@@ -239,7 +243,15 @@ class BrewControllerGui():
     def init_temp(self):
         self.temp = Label(self.frm, textvariable = self.t)
         self.temp.config(relief = FLAT, borderwidth = 5, font = ("Purisa", 50))
-        self.temp.grid(row = 4, column = 0, columnspan = 3, rowspan = 5, stick = "w")
+        self.temp.grid(row = 4, column = 0, columnspan = 1, rowspan = 5, stick = "w")
+
+    def init_status(self):
+        self.heat_status = StringVar()
+        self.heat_status.set("heat off")
+        self.lab_heat_status = Label(self.frm, textvariable = self.heat_status)
+        self.lab_heat_status.config(relief = FLAT, borderwidth = 5, font = ("Purisa", 16))
+        self.lab_heat_status.grid(row = 4, column = 1, columnspan = 1, rowspan = 1, stick = "we")
+        self.lab_heat_status.config(background = "blue")
         
     def init_control_btns(self):
         self.btn_var = IntVar()
@@ -349,7 +361,10 @@ class BrewControllerGui():
 
         if (enable == 0):
             self.btn_tc.deselect()
-        
+            self.btn_pwm.deselect()
+            self.btn_pwm_delay.deselect()
+            self.btn_tc_delay.deselect()
+            self.btn_off.select()
 
     def btn_enable_cb(self):
         if (self.enable.get() == 1):
@@ -377,6 +392,14 @@ class BrewControllerGui():
         while(1):
             self.t.set(round(self.thermometer.read_temp(),1))
 
+    def update_heat_status(self, heat_status):
+        if (heat_status == 1):
+            self.heat_status.set("heat on")
+            self.lab_heat_status.config(background = "red")
+        else:
+            self.heat_status.set("heat off")
+            self.lab_heat_status.config(background = "blue")
+
 # Statemachine
 class Statemachine():
     def __init__(self, start_state, next_cb):
@@ -400,8 +423,8 @@ class BrewController():
         # Init objects
         self.sm = Statemachine(ControlState.off, self.init_state)
         self.gui = BrewControllerGui(kwargs['col_offset'], kwargs['name'], kwargs['device_id'] , self.process_event)
-        self.temp_controller = TempControl(self.process_event, kwargs['device_id'])
-        self.pwm_controller = PwmControl(self.process_event)
+        self.temp_controller = TempControl(self.process_event, self.gui.update_heat_status, kwargs['device_id'])
+        self.pwm_controller = PwmControl(self.process_event, self.gui.update_heat_status)
         self.pwm_delay_timer = Timer(self.process_event, self.process_event)
         self.tc_delay_timer = Timer(self.process_event, self.process_event)
 
@@ -509,7 +532,7 @@ class BrewController():
             self.gui.btn_pwm_enable(0)
             self.gui.btn_tc_enable(0)
             self.gui.btn_pwm_delay_enable(0)
-            self.gui.btn_tc_delay_enable(0)
+            self.gui.btn_tc_delay_enable(1)
 
         elif (self.sm.state == ControlState.tc_delayed_stopping):
             self.tc_delay_timer.stop()
@@ -529,7 +552,7 @@ class BrewController():
             self.pwm_delay_timer.start(int(self.pwm_delay_time))
             self.gui.btn_pwm_enable(0)
             self.gui.btn_tc_enable(0)
-            self.gui.btn_pwm_delay_enable(0)
+            self.gui.btn_pwm_delay_enable(1)
             self.gui.btn_tc_delay_enable(0)           
 
         elif (self.sm.state == ControlState.pwm_delayed_stopping):
@@ -564,7 +587,7 @@ class BrewController():
         self.temp_controller.set_target(int(self.default_tc_target))
         
 hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
-kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
+kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "60")
 mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
 
        
