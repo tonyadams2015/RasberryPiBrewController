@@ -200,7 +200,12 @@ class Timer():
             # Let the man upstairs know that the timer has expired
             if (self.seconds == 0):
                 print "timer expiring"
-                self.expire_cb(Events.timer_expired)
+                self.expire_cb(Events.
+                               timer_expired)
+
+        # Expired ot stopped
+        self.timer_update_cb(0)
+                
 
 root = Tk()
 
@@ -577,6 +582,7 @@ class BrewController():
             self.gui.btn_pwm_update(0)
             self.gui.btn_off_update()
             self.gui.enable_all(1)
+            self.gui.update_timer_display(0)
 
         elif (self.sm.state == ControlState.disabled):
             self.gui.enable_all(0)
