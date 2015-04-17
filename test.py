@@ -166,11 +166,12 @@ class PwmControl(Controller):
 
 # Timer
 class Timer():
-    def __init__(self, expire_cb, stopped_cb):
+    def __init__(self, expire_cb, stopped_cb, timer_update_cb):
         self.i = 1
         self.seconds = 0
         self.expire_cb = expire_cb
         self.stopped_cb = stopped_cb
+        self.timer_update_cb = timer_update_cb
 
     def start(self, seconds):
         print "delay timer starting"
@@ -194,6 +195,7 @@ class Timer():
             time.sleep(1)
             print self.seconds
             self.seconds -= 1
+            self.timer_update_cb(self.seconds)
 
             # Let the man upstairs know that the timer has expired
             if (self.seconds == 0):
@@ -217,6 +219,7 @@ class BrewControllerGui():
         self.init_temp_inputs()
         self.init_btn_enable()
         self.init_status()
+        self.init_timer_display()
 
         # Hook up callbacks for gui events
         self.event_cb = event_cb
@@ -252,7 +255,13 @@ class BrewControllerGui():
         self.lab_heat_status.config(relief = FLAT, borderwidth = 5, font = ("Purisa", 16))
         self.lab_heat_status.grid(row = 4, column = 1, columnspan = 1, rowspan = 1, stick = "we")
         self.lab_heat_status.config(background = "blue")
-        
+
+    def init_timer_display(self):
+        self.time_left = StringVar()
+        self.lab_seconds = Label(self.frm, textvariable = self.time_left)
+        self.lab_seconds.config(relief = FLAT, borderwidth = 5, font = ("Purisa", 16))
+        self.lab_seconds.grid(row = 5, column = 1, columnspan = 1, rowspan = 1, stick = "we")
+ 
     def init_control_btns(self):
         self.btn_var = IntVar()
         self.btn_tc =  Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.tc, command = self.temp_btn_tc_cb)
@@ -400,6 +409,10 @@ class BrewControllerGui():
             self.heat_status.set("heat off")
             self.lab_heat_status.config(background = "blue")
 
+    def update_timer_display(self, seconds):
+        s = time.strftime("%H:%M:%S", time.gmtime(seconds))
+        self.time_left.set(s)
+
 # Statemachine
 class Statemachine():
     def __init__(self, start_state, next_cb):
@@ -425,8 +438,8 @@ class BrewController():
         self.gui = BrewControllerGui(kwargs['col_offset'], kwargs['name'], kwargs['device_id'] , self.process_event)
         self.temp_controller = TempControl(self.process_event, self.gui.update_heat_status, kwargs['device_id'])
         self.pwm_controller = PwmControl(self.process_event, self.gui.update_heat_status)
-        self.pwm_delay_timer = Timer(self.process_event, self.process_event)
-        self.tc_delay_timer = Timer(self.process_event, self.process_event)
+        self.pwm_delay_timer = Timer(self.process_event, self.process_event, self.gui.update_timer_display)
+        self.tc_delay_timer = Timer(self.process_event, self.process_event, self.gui.update_timer_display)
 
         # Init defaults
         self.default_tc_target = kwargs['tc_default']
@@ -549,6 +562,7 @@ class BrewController():
             self.gui.btn_pwm_update(1)
 
         elif (self.sm.state == ControlState.pwm_delayed):
+            print "starting timer"
             self.pwm_delay_timer.start(int(self.pwm_delay_time))
             self.gui.btn_pwm_enable(0)
             self.gui.btn_tc_enable(0)
@@ -589,7 +603,5 @@ class BrewController():
 hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
 kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "60")
 mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
-
-       
 
 root.mainloop()
