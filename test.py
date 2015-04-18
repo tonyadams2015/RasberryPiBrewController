@@ -72,6 +72,7 @@ class Controller():
         self.turned_on = 0
         self.stopped_cb = stopped_cb
         self.heat_cb = heat_cb
+        self.pifacedigital = pifacedigitalio.PiFaceDigital()
 
     def set_target(self, target):
         self.target = target
@@ -96,7 +97,10 @@ class Controller():
  
     def run(self):
         while (self.mode == ControlMode.on):
-            self.control()
+            try:
+                self.control()
+            except:
+                 raise 
         self.turn_off()
         self.stopped_cb(Events.controller_stopped)
 
@@ -105,24 +109,22 @@ class Controller():
 
     def turn_on(self):
         if (self.turned_on == 0):
-     	    pifacedigital = pifacedigitalio.PiFaceDigital()
-	    pifacedigital.output_pins[4].turn_on()
+	    self.pifacedigital.output_pins[4].turn_on()
             time.sleep(0.05)
-	    pifacedigital.output_pins[5].turn_on()
+	    self.pifacedigital.output_pins[5].turn_on()
 	    time.sleep(0.05)
-	    pifacedigital.output_pins[6].turn_on()
+	    self.pifacedigital.output_pins[6].turn_on()
             print "turn heat on"
 	    self.turned_on = 1
 	    self.heat_cb(1)
 
     def turn_off(self):
         self.turned_on = 0
-     	pifacedigital = pifacedigitalio.PiFaceDigital()
-	pifacedigital.output_pins[4].turn_off()
+	self.pifacedigital.output_pins[4].turn_off()
         time.sleep(0.05)
-	pifacedigital.output_pins[5].turn_off()
+	self.pifacedigital.output_pins[5].turn_off()
         time.sleep(0.05) 
-	pifacedigital.output_pins[6].turn_off()
+	self.pifacedigital.output_pins[6].turn_off()
         print "turning heat off"
         self.heat_cb(0)
 
