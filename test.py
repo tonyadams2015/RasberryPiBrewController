@@ -156,15 +156,23 @@ class PwmControl(Controller):
     def __init__(self, stopped_cb, heat_cb):
         Controller.__init__(self, stopped_cb, heat_cb)
         self.period = 4
+        self.latch = 0
 	        
     def control(self):
         self.turn_on()
         print "pwm on time = " + str(self.target * self.period)
         time.sleep(self.target * self.period)
-        self.turn_off()
-        print "pwm off time = " + str((1 - self.target) * self.period)
-        time.sleep((1 - self.target) * self.period)
-     	self.turn_off()
+
+        if (self.target == 1):
+            self.latch = 1
+        else:
+            self.latch = 0
+
+        if (self.latch != 1):
+            self.turn_off()
+            print "pwm off time = " + str((1 - self.target) * self.period)
+            time.sleep((1 - self.target) * self.period)
+     	    self.turn_off()
 
 # Timer
 class Timer():
@@ -302,7 +310,7 @@ class BrewControllerGui():
         self.temp_label_pwm = Label(self.frm, text = "PWM", font = ("Purisa", 15))
         self.temp_label_pwm.grid(row = 16, column = 0, sticky = "w")
         self.temp_input_pwm = Spinbox(self.frm, from_ = 10, to = 100, textvariable = self.pwm_target, command = self.pwm_input_target_cb)
-        self.temp_input_pwm.config(width = 5, font = ("Purisa", 15))
+        self.temp_input_pwm.config(width = 5, font = ("Purisa", 15), values = (10,20,30,40,50,60,70,75,80,85,90,95,100))
 	self.temp_input_pwm.grid(row = 16, column = 1, sticky = "we")
 	self.label_delay_time = Label(self.frm, text = "Delay Timer", font = ("Purisa", 15))
         self.label_delay_time.grid(row = 17, column = 0, sticky = "w")
