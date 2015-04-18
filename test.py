@@ -314,7 +314,7 @@ class BrewControllerGui():
 	self.temp_input_pwm.grid(row = 16, column = 1, sticky = "we")
 	self.label_delay_time = Label(self.frm, text = "Delay Timer", font = ("Purisa", 15))
         self.label_delay_time.grid(row = 17, column = 0, sticky = "w")
-        self.input_delay_time = Spinbox(self.frm, from_ = 10, to = 100, textvariable = self.delay_time, command = self.input_delay_time_cb)
+        self.input_delay_time = Spinbox(self.frm, from_ = 1, to = 24, textvariable = self.delay_time, command = self.input_delay_time_cb)
         self.input_delay_time.config(width = 5, font = ("Purisa", 15))
 	self.input_delay_time.grid(row = 17, column = 1, sticky = "we")
 
@@ -409,8 +409,8 @@ class BrewControllerGui():
         self.event_cb(Events.set_pwm, float(self.pwm_target.get()) / 100)
 
     def input_delay_time_cb(self):
-        self.event_cb(Events.set_pwm_delay_time, float(self.delay_time.get()))
-        self.event_cb(Events.set_tc_delay_time, float(self.delay_time.get()))
+        self.event_cb(Events.set_pwm_delay_time, float(self.delay_time.get())*3600)
+        self.event_cb(Events.set_tc_delay_time, float(self.delay_time.get())*3600)
 
     def read_temp(self):
         while(1):
@@ -616,8 +616,8 @@ class BrewController():
         self.pwm_controller.set_target(float(self.default_pwm_target) / 100)
         self.temp_controller.set_target(int(self.default_tc_target))
         
-hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
-kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "60")
-mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "60")
+hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12")
+kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "12")
+mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12")
 
 root.mainloop()
