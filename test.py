@@ -409,8 +409,8 @@ class BrewControllerGui():
         self.event_cb(Events.set_pwm, float(self.pwm_target.get()) / 100)
 
     def input_delay_time_cb(self):
-        self.event_cb(Events.set_pwm_delay_time, float(self.delay_time.get())*3600)
-        self.event_cb(Events.set_tc_delay_time, float(self.delay_time.get())*3600)
+        self.event_cb(Events.set_pwm_delay_time, float(self.delay_time.get()))
+        self.event_cb(Events.set_tc_delay_time, float(self.delay_time.get()))
 
     def read_temp(self):
         while(1):
@@ -556,7 +556,7 @@ class BrewController():
             self.gui.btn_tc_update(1)
 
         elif (self.sm.state == ControlState.tc_delayed):
-            self.tc_delay_timer.start(int(self.tc_delay_time))
+            self.tc_delay_timer.start(int(self.tc_delay_time) * 3600)
             self.gui.btn_pwm_enable(0)
             self.gui.btn_tc_enable(0)
             self.gui.btn_pwm_delay_enable(0)
@@ -578,7 +578,7 @@ class BrewController():
 
         elif (self.sm.state == ControlState.pwm_delayed):
             print "starting timer"
-            self.pwm_delay_timer.start(int(self.pwm_delay_time))
+            self.pwm_delay_timer.start(int(self.pwm_delay_time)* 3600)
             self.gui.btn_pwm_enable(0)
             self.gui.btn_tc_enable(0)
             self.gui.btn_pwm_delay_enable(1)
