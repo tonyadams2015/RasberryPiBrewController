@@ -77,13 +77,8 @@ class Controller():
     def set_target(self, target):
         self.target = target
         print "set target " + str(target)
- 
-    def start(self):
-        th = Thread(target = self.start_delay())
-        th.start()
   
-    def start_delay(self):
-        time.sleep(2)
+    def start(self):
         print "starting"
         self.mode = ControlMode.on
 
