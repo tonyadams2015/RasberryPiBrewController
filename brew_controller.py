@@ -13,11 +13,11 @@ hlt_config = Config("HLT", "28-0000042dd80d")
 # 1-wire Thermometer
 class Thermometer():
     def __init__(self, device_id):
-	self.device_id = device_id
+        self.device_id = device_id
 
     def read_temp(self):
         print "read temp"
-	tfile = open("/sys/bus/w1/devices/" + self.device_id + "/w1_slave")
+        tfile = open("/sys/bus/w1/devices/" + self.device_id + "/w1_slave")
         text = tfile.read()
         tfile.close()
         secondline = text.split("\n")[1]
@@ -104,22 +104,22 @@ class Controller():
 
     def turn_on(self):
         if (self.turned_on == 0):
-	    self.pifacedigital.output_pins[4].turn_on()
+            self.pifacedigital.output_pins[4].turn_on()
             time.sleep(0.05)
-	    self.pifacedigital.output_pins[5].turn_on()
-	    time.sleep(0.05)
-	    self.pifacedigital.output_pins[6].turn_on()
+            self.pifacedigital.output_pins[5].turn_on()
+            time.sleep(0.05)
+            self.pifacedigital.output_pins[6].turn_on()
             print "turn heat on"
-	    self.turned_on = 1
-	    self.heat_cb(1)
+        self.turned_on = 1
+        self.heat_cb(1)
 
     def turn_off(self):
         self.turned_on = 0
-	self.pifacedigital.output_pins[4].turn_off()
+        self.pifacedigital.output_pins[4].turn_off()
         time.sleep(0.05)
-	self.pifacedigital.output_pins[5].turn_off()
+        self.pifacedigital.output_pins[5].turn_off()
         time.sleep(0.05) 
-	self.pifacedigital.output_pins[6].turn_off()
+        self.pifacedigital.output_pins[6].turn_off()
         print "turning heat off"
         self.heat_cb(0)
 
@@ -152,7 +152,7 @@ class PwmControl(Controller):
         Controller.__init__(self, stopped_cb, heat_cb)
         self.period = 4
         self.latch = 0
-	        
+
     def control(self):
         self.turn_on()
         print "pwm on time = " + str(self.target * self.period)
@@ -221,7 +221,7 @@ class BrewControllerGui():
         self.device_id = device_id        
 
         # Init widgets
-	self.t = DoubleVar()
+        self.t = DoubleVar()
         self.col_offset = col_offset
         self.init_frame()
         self.init_temp()
@@ -279,18 +279,18 @@ class BrewControllerGui():
         self.btn_tc.grid(row = 10, column = 0, sticky = "we", columnspan = 2)
         self.btn_pwm = Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.pwm, command = self.temp_btn_pwm_cb)
         self.btn_pwm.config(text = "PWM", indicatoron = 0, font = ("Purisa", 17))
-	self.btn_pwm.grid(row = 11, column = 0, sticky = "we", columnspan = 2)
+        self.btn_pwm.grid(row = 11, column = 0, sticky = "we", columnspan = 2)
 
         self.btn_tc_delay =  Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.tc_delayed, command = self.temp_btn_tc_delay_cb)
         self.btn_tc_delay.config(text = "Temp Control Later", indicatoron = 0, font = ("Purisa", 17))
         self.btn_tc_delay.grid(row = 12, column = 0, sticky = "we", columnspan = 2)
 
         self.btn_pwm_delay = Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.pwm_delayed, command = self.temp_btn_pwm_delay_cb)
-	self.btn_pwm_delay.config(width = 25,text = "PWM Later ", indicatoron = 0, font = ("Purisa", 17))
+        self.btn_pwm_delay.config(width = 25,text = "PWM Later ", indicatoron = 0, font = ("Purisa", 17))
         self.btn_pwm_delay.grid(row = 13, column = 0, sticky = "we", columnspan = 2)
 
         self.btn_off = Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.off, command = self.temp_btn_off_cb)
-	self.btn_off.config(width = 20,text = "Off", indicatoron = 0, font = ("Purisa", 17))
+        self.btn_off.config(width = 20,text = "Off", indicatoron = 0, font = ("Purisa", 17))
         self.btn_off.grid(row = 14, column = 0, sticky = "we", columnspan = 2, pady = (0,20)) 
         
     def init_temp_inputs(self):
@@ -306,12 +306,12 @@ class BrewControllerGui():
         self.temp_label_pwm.grid(row = 16, column = 0, sticky = "w")
         self.temp_input_pwm = Spinbox(self.frm, from_ = 10, to = 100, textvariable = self.pwm_target, command = self.pwm_input_target_cb)
         self.temp_input_pwm.config(width = 5, font = ("Purisa", 15), values = (10,20,30,40,50,60,70,75,80,85,90,95,100))
-	self.temp_input_pwm.grid(row = 16, column = 1, sticky = "we")
-	self.label_delay_time = Label(self.frm, text = "Delay Timer", font = ("Purisa", 15))
+        self.temp_input_pwm.grid(row = 16, column = 1, sticky = "we")
+        self.label_delay_time = Label(self.frm, text = "Delay Timer", font = ("Purisa", 15))
         self.label_delay_time.grid(row = 17, column = 0, sticky = "w")
         self.input_delay_time = Spinbox(self.frm, from_ = 1, to = 24, textvariable = self.delay_time, command = self.input_delay_time_cb)
         self.input_delay_time.config(width = 5, font = ("Purisa", 15))
-	self.input_delay_time.grid(row = 17, column = 1, sticky = "we")
+        self.input_delay_time.grid(row = 17, column = 1, sticky = "we")
 
     def btn_tc_update(self, is_stopping):
         self.btn_tc.select()
@@ -395,7 +395,7 @@ class BrewControllerGui():
         self.event_cb(Events.btn_pwm_delay)
         
     def temp_btn_off_cb(self):
-	self.event_cb(Events.btn_off)
+            self.event_cb(Events.btn_off)
 
     def temp_input_target_cb(self):
         self.event_cb(Events.set_tc, self.temp_target.get())
