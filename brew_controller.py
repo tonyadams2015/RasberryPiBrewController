@@ -425,6 +425,7 @@ class BrewControllerGui():
     def read_temp(self):
         while(1):
             self.t.set(round(self.thermometer.read_temp(),1))
+            time.sleep(1)
 
     def update_heat_status(self, heat_status):
         if (heat_status == 1):
