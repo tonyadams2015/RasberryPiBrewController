@@ -1,4 +1,7 @@
-import pifacedigitalio
+try:
+    import pifacedigitalio
+except ImportError:
+    print "import failed for pifacedigitalio"
 from Tkinter import *
 import time
 from threading import Thread
@@ -16,14 +19,17 @@ class Thermometer():
         self.device_id = device_id
 
     def read_temp(self):
-        print "read temp"
-        tfile = open("/sys/bus/w1/devices/" + self.device_id + "/w1_slave")
-        text = tfile.read()
-        tfile.close()
-        secondline = text.split("\n")[1]
-        temperaturedata = secondline.split(" ")[9]
-        temperature = float(temperaturedata[2:])/1000
-        return temperature
+        try:
+            print "read temp"
+            tfile = open("/sys/bus/w1/devices/" + self.device_id + "/w1_slave")
+            text = tfile.read()
+            tfile.close()
+            secondline = text.split("\n")[1]
+            temperaturedata = secondline.split(" ")[9]
+            temperature = float(temperaturedata[2:])/1000
+            return temperature
+        except IOError:
+            return 0
 
 
 # Heat control modes
@@ -72,7 +78,10 @@ class Controller():
         self.turned_on = 0
         self.stopped_cb = stopped_cb
         self.heat_cb = heat_cb
-        self.pifacedigital = pifacedigitalio.PiFaceDigital()
+        try:
+            self.pifacedigital = pifacedigitalio.PiFaceDigital()
+        except NameError:
+            print "pifacedigital is not available on this platform"
 
     def set_target(self, target):
         self.target = target
@@ -104,22 +113,28 @@ class Controller():
 
     def turn_on(self):
         if (self.turned_on == 0):
-            self.pifacedigital.output_pins[4].turn_on()
-            time.sleep(0.05)
-            self.pifacedigital.output_pins[5].turn_on()
-            time.sleep(0.05)
-            self.pifacedigital.output_pins[6].turn_on()
+            try:
+                self.pifacedigital.output_pins[4].turn_on()
+                time.sleep(0.05)
+                self.pifacedigital.output_pins[5].turn_on()
+                time.sleep(0.05)
+                self.pifacedigital.output_pins[6].turn_on()
+            except AttributeError:
+                print "pifacedigital is not available on this platform"
             print "turn heat on"
         self.turned_on = 1
         self.heat_cb(1)
 
     def turn_off(self):
         self.turned_on = 0
-        self.pifacedigital.output_pins[4].turn_off()
-        time.sleep(0.05)
-        self.pifacedigital.output_pins[5].turn_off()
-        time.sleep(0.05) 
-        self.pifacedigital.output_pins[6].turn_off()
+        try:
+            self.pifacedigital.output_pins[4].turn_off()
+            time.sleep(0.05)
+            self.pifacedigital.output_pins[5].turn_off()
+            time.sleep(0.05) 
+            self.pifacedigital.output_pins[6].turn_off()
+        except AttributeError:
+                print "pifacedigital is not available on this platform"
         print "turning heat off"
         self.heat_cb(0)
 
