@@ -227,9 +227,6 @@ class Timer():
         self.timer_update_cb(0)
                 
 
-root = Tk()
-
-
 class BrewControllerGui():
     def __init__(self, col_offset, name, device_id, event_cb):
         self.name = name
@@ -626,9 +623,11 @@ class BrewController():
         self.gui.set_input_delay_time(self.default_delay_time)
         self.pwm_controller.set_target(float(self.default_pwm_target) / 100)
         self.temp_controller.set_target(int(self.default_tc_target))
-        
-hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12")
-kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "12")
-mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12")
 
-root.mainloop()
+
+if __name__ == "__main__":
+    root = Tk()
+    hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12")
+    kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "12")
+    mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12")
+    root.mainloop()
