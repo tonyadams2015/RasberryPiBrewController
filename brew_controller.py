@@ -5,6 +5,10 @@ except ImportError:
 from Tkinter import *
 import time
 from threading import Thread
+#from threading import Event
+import threading
+import signal
+import os
 
 class Config():
     def __init__(self, name, device_id):
@@ -29,7 +33,7 @@ class Thermometer():
             temperature = float(temperaturedata[2:])/1000
             return temperature
         except IOError:
-            return 0
+            return 20
 
 
 # Heat control modes
@@ -70,14 +74,81 @@ class Events():
     enable = 12
     disable =13
 
+# Elements
+class Elements:
+    def __init__(self, pins, heat_cb):
+        self.pins = pins
+        self.heat_cb = heat_cb
+        self.turned_on = 0
+        self.int_sleep = threading.Event()
+        try:
+            self.pifacedigital = pifacedigitalio.PiFaceDigital()
+        except NameError:
+            print "pifacedigital is not available on this platform"
+
+    def turn_on(self):
+        if (self.turned_on == 0):
+            try:
+                for pin in self.pins:
+                    self.pifacedigital.output_pins[pin].turn_on()
+                    time.sleep(0.05)
+            except AttributeError:
+                print "pifacedigital is not available on this platform"
+        print "turn heat on"
+        self.turned_on = 1
+        self.heat_cb(1)
+
+    def turn_off(self):
+        if (self.turned_on != 0):
+            self.turned_on = 0
+            try:
+                for pin in self.pins:
+                    self.pifacedigital.output_pins[pin].turn_off()
+                    time.sleep(0.05)
+            except AttributeError:
+                print "pifacedigital is not available on this platform"
+        print "turning heat off"
+        self.heat_cb(0)
+
+    def interruptable_sleep(self, delay):
+        self.int_sleep = threading.Event()
+        self.int_sleep.wait(delay)
+
+    def interrupt_sleep(self):
+        self.int_sleep.set()
+
+# PWM
+class PwmElements(Elements):
+    def __init__(self, pins, heat_cb):
+        Elements.__init__(self, pins, heat_cb)
+        self.latch = 0
+
+    def run(self, period, duty_cycle):
+        self.int_sleep.clear()
+        self.turn_on()
+        print "pwm on time = " + str(duty_cycle * period)
+        self.interruptable_sleep(duty_cycle * period)
+
+        if (duty_cycle == 1):
+            self.latch = 1
+        else:
+            self.latch = 0
+
+        if (self.latch != 1):
+            self.turn_off()
+            print "pwm off time = " + str((1 - duty_cycle) * period)
+            self.interruptable_sleep((1 - duty_cycle) * period)
+            self.turn_off()
+
 # Controller base class
 class Controller():
-    def __init__(self, stopped_cb, heat_cb):
+    def __init__(self, stopped_cb, heat_cb, pins):
         self.target = 0
         self.mode = ControlMode.off
         self.turned_on = 0
         self.stopped_cb = stopped_cb
         self.heat_cb = heat_cb
+        self.actuator = Elements(pins, heat_cb)
         try:
             self.pifacedigital = pifacedigitalio.PiFaceDigital()
         except NameError:
@@ -92,97 +163,112 @@ class Controller():
         self.mode = ControlMode.on
 
         # Start control thread
-        run_th = Thread(target = self.run)
-        run_th.start()
+        self.control_thread = Thread(target = self.control_run)
+        self.control_thread.start()
+
+        # Start control thread
+        self.actuate_thread = Thread(target = self.actuate_run)
+        self.actuate_thread.start()
 
     def stop(self):
         print "stopping"
         self.mode = ControlMode.off
- 
-    def run(self):
+        self.cancel_actuator()
+
+    def control_run(self):
         while (self.mode == ControlMode.on):
             try:
                 self.control()
             except:
                  raise 
-        self.turn_off()
+
+    def actuate_run(self):
+        while (self.mode == ControlMode.on):
+            print "actuate"
+            try:
+                self.actuate()
+            except:
+                 raise 
+        self.actuator.turn_off()
         self.stopped_cb(Events.controller_stopped)
 
     def control(self):
-        print "not implemented"
+        print "control() not implemented"
+        time.sleep(1)
 
-    def turn_on(self):
-        if (self.turned_on == 0):
-            try:
-                self.pifacedigital.output_pins[4].turn_on()
-                time.sleep(0.05)
-                self.pifacedigital.output_pins[5].turn_on()
-                time.sleep(0.05)
-                self.pifacedigital.output_pins[6].turn_on()
-            except AttributeError:
-                print "pifacedigital is not available on this platform"
-            print "turn heat on"
-        self.turned_on = 1
-        self.heat_cb(1)
+    def actuate(self):
+        print "actuate() not implemented"
+        time.sleep(1)
 
-    def turn_off(self):
-        self.turned_on = 0
-        try:
-            self.pifacedigital.output_pins[4].turn_off()
-            time.sleep(0.05)
-            self.pifacedigital.output_pins[5].turn_off()
-            time.sleep(0.05) 
-            self.pifacedigital.output_pins[6].turn_off()
-        except AttributeError:
-                print "pifacedigital is not available on this platform"
-        print "turning heat off"
-        self.heat_cb(0)
-
+    def cancel_actuator(self):
+        self.actuator.interrupt_sleep()
 
 # Temperature Control
 class TempControl(Controller):
-    def __init__(self, stopped_cb, heat_cb, device_id):
-        Controller.__init__(self, stopped_cb, heat_cb)
-	self.deadband = 0.5
+    def __init__(self, stopped_cb, heat_cb, device_id, pins):
+        Controller.__init__(self, stopped_cb, heat_cb, pins)
         self.temp = 0
         self.thermometer = Thermometer(device_id)
+        self.deadband = 0.5
+        self.control_decision = 0
 
     def control(self):
         self.temp = self.thermometer.read_temp()
         print self.temp
         if ((self.temp + self.deadband) < self.target):
-            if (self.turned_on != 1):
-                print "temp control turning heat on"
-                self.turn_on()
+            self.control_decision = 1 
         else:
-            if (self.turned_on != 0):
-                print "temp setpoint reached"
-                self.turn_off()
+            self.control_decision = 0
         time.sleep(1)
 
+    def actuate(self):
+        if (self.control_decision == 1):
+            self.actuator.turn_on()
+        else:
+            self.actuator.turn_off()
+        time.sleep(1)
         
 # PWM Control
 class PwmControl(Controller):
-    def __init__(self, stopped_cb, heat_cb):
-        Controller.__init__(self, stopped_cb, heat_cb)
+    def __init__(self, stopped_cb, heat_cb, pins):
+        Controller.__init__(self, stopped_cb, heat_cb, pins)
+        self.actuator = PwmElements(pins, heat_cb)
         self.period = 4
         self.latch = 0
+        self.duty_cycle = 0
 
+    def set_duty_cycle(self, duty_cycle):
+        self.duty_cycle = duty_cycle
+        print "set duty_cycle " + str(duty_cycle)
+
+    def actuate(self):
+        self.actuator.run(self.period, self.duty_cycle)
+
+# Tempcontrol with pwm
+class VariableTempControl(PwmControl):
+    def __init__(self, stopped_cb, heat_cb, device_id, pins):
+        PwmControl.__init__(self, stopped_cb, heat_cb, pins)
+        self.temp = 0
+        self.thermometer = Thermometer(device_id)
+        self.deadband = 0.5
+        self.control_decision = 0
+        
     def control(self):
-        self.turn_on()
-        print "pwm on time = " + str(self.target * self.period)
-        time.sleep(self.target * self.period)
-
-        if (self.target == 1):
-            self.latch = 1
+        self.temp = self.thermometer.read_temp()
+        print self.temp
+        print self.target
+        if ((self.temp + self.deadband) < self.target):
+            self.control_decision = 1 
         else:
-            self.latch = 0
+            self.control_decision = 0
+        time.sleep(1)
 
-        if (self.latch != 1):
-            self.turn_off()
-            print "pwm off time = " + str((1 - self.target) * self.period)
-            time.sleep((1 - self.target) * self.period)
-     	    self.turn_off()
+    def actuate(self):
+        if (self.control_decision == 1):
+            self.actuator.run(self.period, self.duty_cycle)
+        else:
+            self.actuator.turn_off()
+            time.sleep(1)
 
 # Timer
 class Timer():
@@ -421,7 +507,10 @@ class BrewControllerGui():
 
     def read_temp(self):
         while(1):
-            self.t.set(round(self.thermometer.read_temp(),1))
+            try:
+                self.t.set(round(self.thermometer.read_temp(),1))
+            except:
+                return
             time.sleep(1)
 
     def update_heat_status(self, heat_status):
@@ -459,8 +548,8 @@ class BrewController():
         # Init objects
         self.sm = Statemachine(ControlState.off, self.init_state)
         self.gui = BrewControllerGui(kwargs['col_offset'], kwargs['name'], kwargs['device_id'] , self.process_event)
-        self.temp_controller = TempControl(self.process_event, self.gui.update_heat_status, kwargs['device_id'])
-        self.pwm_controller = PwmControl(self.process_event, self.gui.update_heat_status)
+        self.temp_controller = VariableTempControl(self.process_event, self.gui.update_heat_status, kwargs['device_id'], kwargs['pins'])
+        self.pwm_controller = PwmControl(self.process_event, self.gui.update_heat_status, kwargs['pins'])
         self.pwm_delay_timer = Timer(self.process_event, self.process_event, self.gui.update_timer_display)
         self.tc_delay_timer = Timer(self.process_event, self.process_event, self.gui.update_timer_display)
 
@@ -487,7 +576,8 @@ class BrewController():
            self.temp_controller.set_target(args[0])
            return
         elif (event == Events.set_pwm):
-           self.pwm_controller.set_target(args[0])
+           self.pwm_controller.set_duty_cycle(args[0])
+           self.temp_controller.set_duty_cycle(args[0])
            return
         elif (event == Events.set_pwm_delay_time):
            self.pwm_delay_time = args[0]
@@ -621,13 +711,14 @@ class BrewController():
         self.gui.set_tc_input_target(self.default_tc_target)
         self.gui.set_pwm_input_target(self.default_pwm_target)
         self.gui.set_input_delay_time(self.default_delay_time)
-        self.pwm_controller.set_target(float(self.default_pwm_target) / 100)
+        self.pwm_controller.set_duty_cycle(float(self.default_pwm_target) / 100)
         self.temp_controller.set_target(int(self.default_tc_target))
+        self.temp_controller.set_duty_cycle(float(self.default_pwm_target) / 100)
 
 
 if __name__ == "__main__":
     root = Tk()
-    hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12")
-    kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "12")
-    mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12")
+    hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12", pins = [3,4,5])
+    kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "12", pins = [6,7,8])
+    mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12", pins = None)
     root.mainloop()
