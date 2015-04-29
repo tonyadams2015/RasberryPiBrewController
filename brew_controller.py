@@ -57,6 +57,7 @@ class ControlState():
     pwm_delayed = 7
     pwm_delayed_stopping = 8
     disabled = 9
+    shutting_down = 10
 
 class Events():
     btn_off = 0
@@ -72,7 +73,22 @@ class Events():
     set_tc_delay_time = 10
     timer_stopped = 11
     enable = 12
-    disable =13
+    disable = 13
+    shutdown = 14
+
+class InterrupableSleep():
+    def __init__(self):
+        self._sleep = threading.Event()
+
+    def sleep(self, delay):
+        self._sleep.wait(delay)
+
+    def interrupt(self):
+        self._sleep.set()
+
+    def clear(self):
+        self._sleep.clear()
+
 
 # Elements
 class Elements:
@@ -149,6 +165,7 @@ class Controller():
         self.stopped_cb = stopped_cb
         self.heat_cb = heat_cb
         self.actuator = Elements(pins, heat_cb)
+        self.control_sleep = InterrupableSleep()
         try:
             self.pifacedigital = pifacedigitalio.PiFaceDigital()
         except NameError:
@@ -163,6 +180,7 @@ class Controller():
         self.mode = ControlMode.on
 
         # Start control thread
+        self.control_sleep.clear()
         self.control_thread = Thread(target = self.control_run)
         self.control_thread.start()
 
@@ -173,6 +191,7 @@ class Controller():
     def stop(self):
         print "stopping"
         self.mode = ControlMode.off
+        self.control_sleep.interrupt()
         self.cancel_actuator()
 
     def control_run(self):
@@ -194,7 +213,7 @@ class Controller():
 
     def control(self):
         print "control() not implemented"
-        time.sleep(1)
+        self.control_sleep.sleep(1)
 
     def actuate(self):
         print "actuate() not implemented"
@@ -268,7 +287,6 @@ class VariableTempControl(PwmControl):
             self.actuator.run(self.period, self.duty_cycle)
         else:
             self.actuator.turn_off()
-            time.sleep(1)
 
 # Timer
 class Timer():
@@ -333,9 +351,16 @@ class BrewControllerGui():
         self.event_cb = event_cb
 
         # Start temp read thread
+        self.run = 1
+        self.thermometer_sleep = InterrupableSleep()
+        self.thermometer_sleep.clear()
         self.thermometer = Thermometer(self.device_id)
         self.th = Thread(target = self.read_temp)
         self.th.start()
+
+    def close(self):
+        self.run = 0
+        self.thermometer_sleep.interrupt()
 
     def init_frame(self):
         self.frm = Frame(root, relief = RIDGE, borderwidth = 5)
@@ -506,12 +531,13 @@ class BrewControllerGui():
         self.event_cb(Events.set_tc_delay_time, float(self.delay_time.get()))
 
     def read_temp(self):
-        while(1):
+        while(self.run):
             try:
                 self.t.set(round(self.thermometer.read_temp(),1))
             except:
                 return
-            time.sleep(1)
+            self.thermometer_sleep.sleep(1)
+            
 
     def update_heat_status(self, heat_status):
         if (heat_status == 1):
@@ -561,8 +587,6 @@ class BrewController():
 
         self.pwm_delay_time = self.default_delay_time
         self.tc_delay_time = self.default_delay_time
-        
-        root.protocol("WM_DELETE_WINDOW", self.close_cb)
 
         # Init state
         self.sm.next(ControlState.disabled)
@@ -586,9 +610,11 @@ class BrewController():
            self.tc_delay_time = args[0]
            return
 
-        # Disable works from any state
+        # Disable ans shutdown works from any state
         if (event == Events.disable):
             self.sm.next(ControlState.disabled)
+        if (event == Events.shutdown):
+            self.sm.next(ControlState.shutting_down)
 
         # Process events that depend on state
         if (self.sm.state == ControlState.disabled):
@@ -640,6 +666,11 @@ class BrewController():
         elif (self.sm.state == ControlState.pwm_delayed_stopping):
             if (event == Events.timer_stopped):
                 self.sm.next(ControlState.off)
+
+        elif (self.sm.state == ControlState.shutting_down):
+            if (event == Events.timer_stopped):
+                self.sm.next(ControlState.off)
+
                 
     def init_state(self):
         if (self.sm.state == ControlState.tc):
@@ -696,16 +727,17 @@ class BrewController():
             self.gui.enable_all(0)
             self.turn_off_everything()
 
-    def turn_off_everything(self):
-	self.temp_controller.stop()
-	self.pwm_controller.stop()
-	self.pwm_delay_timer.stop()
-	self.tc_delay_timer.stop()
+        elif (self.sm.state == ControlState.shutting_down):
+            self.turn_off_everything()
+            self.gui.close()
 
-    # Handle window close
-    def close_cb(self):
-        self.turn_off_everything()
-        root.quit()
+
+    def turn_off_everything(self):
+        self.temp_controller.stop()
+        self.pwm_controller.stop()
+        self.pwm_delay_timer.stop()
+        self.tc_delay_timer.stop()
+        
          
     def init_defaults(self):
         self.gui.set_tc_input_target(self.default_tc_target)
@@ -716,9 +748,28 @@ class BrewController():
         self.temp_controller.set_duty_cycle(float(self.default_pwm_target) / 100)
 
 
+
 if __name__ == "__main__":
+
+    def close():
+        cntrs = [hlt, kettle, mt]
+        
+        # Check that we are ready to close
+        for c in cntrs:
+            if (c.sm.state != ControlState.off and c.sm.state != ControlState.disabled):
+                return
+        # We are ready to close
+        for c in cntrs:
+            c.process_event(Events.shutdown)
+
+        root.quit()
+
     root = Tk()
+    root.protocol("WM_DELETE_WINDOW", close)
     hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12", pins = [3,4,5])
     kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "12", pins = [6,7,8])
     mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12", pins = None)
+
+
+
     root.mainloop()
