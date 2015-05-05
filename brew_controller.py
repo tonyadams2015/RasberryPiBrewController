@@ -7,15 +7,10 @@ import time
 from threading import Thread
 #from threading import Event
 import threading
+import thread
 import signal
 import os
 
-class Config():
-    def __init__(self, name, device_id):
-        self.name = name
-	self.device_id = device_id
-        
-hlt_config = Config("HLT", "28-0000042dd80d")   
 
 # 1-wire Thermometer
 class Thermometer():
@@ -35,28 +30,20 @@ class Thermometer():
         except IOError:
             return 20
 
-# Heat control modes
-class ControlMode():
-    off = 0
-    on = 1
-    tc = 2
-    tc_delayed = 3
-    pwm = 4
-    pwm_delayed = 5
-
 # Heat control states
 class ControlState():
     off = 0
-    tc = 1
-    tc_stopping = 2
-    tc_delayed = 3
-    tc_delayed_stopping = 4
-    pwm = 5
-    pwm_stopping = 6
-    pwm_delayed = 7
-    pwm_delayed_stopping = 8
-    disabled = 9
-    shutting_down = 10
+    on = 1
+    tc = 2
+    tc_stopping = 3
+    tc_delayed = 4
+    tc_delayed_stopping = 5
+    pwm = 6
+    pwm_stopping = 7
+    pwm_delayed = 8
+    pwm_delayed_stopping = 9
+    disabled = 10
+    shutting_down = 11
 
 class Events():
     btn_off = 0
@@ -74,6 +61,8 @@ class Events():
     enable = 12
     disable = 13
     shutdown = 14
+    heat_on = 15
+    heat_off = 16
 
 class InterrupableSleep():
     def __init__(self):
@@ -111,7 +100,7 @@ class Elements:
                 print "pifacedigital is not available on this platform"
         print "turn heat on"
         self.turned_on = 1
-        self.heat_cb(1)
+        self.heat_cb(Events.heat_on)
 
     def turn_off(self):
         if (self.turned_on != 0):
@@ -123,7 +112,7 @@ class Elements:
             except AttributeError:
                 print "pifacedigital is not available on this platform"
             print "turning heat off"
-        self.heat_cb(0)
+        self.heat_cb(Events.heat_off)
 
     def interruptable_sleep(self, delay):
         self.int_sleep = threading.Event()
@@ -159,7 +148,7 @@ class PwmElements(Elements):
 class Controller():
     def __init__(self, stopped_cb, heat_cb, pins):
         self.target = 0
-        self.mode = ControlMode.off
+        self.mode = ControlState.off
         self.turned_on = 0
         self.stopped_cb = stopped_cb
         self.heat_cb = heat_cb
@@ -177,7 +166,7 @@ class Controller():
   
     def start(self):
         print "starting"
-        self.mode = ControlMode.on
+        self.mode = ControlState.on
 
         # Start control thread
         self.control_sleep.clear()
@@ -191,14 +180,14 @@ class Controller():
 
     def stop(self):
         print "stopping"
-        self.mode = ControlMode.off
+        self.mode = ControlState.off
         self.control_sleep.interrupt()
         self.actuator_sleep.interrupt()
         self.cancel_actuator()
 
     def control_run(self):
         if(1):
-            while (self.mode == ControlMode.on):
+            while (self.mode == ControlState.on):
                 try:
                     self.control()
                 except:
@@ -206,7 +195,7 @@ class Controller():
 
     def actuate_run(self):
         if(1):
-            while (self.mode == ControlMode.on):
+            while (self.mode == ControlState.on):
                 print "actuate"
                 try:
                     self.actuate()
@@ -335,14 +324,25 @@ class Timer():
         # Expired or stopped
         self.timer_update_cb(0)
 
+class Gui():
 
-class BrewControllerGui():
+    # Button indexes
+    BTN_OFF = 0
+    BTN_TC = 1
+    BTN_PWM = 2
+    BTN_TC_LATER = 3
+    BTN_PWM_LATER = 4
+
+    # Action indexes
+    ACTION_ENABLE = 0
+    ACTION_TEXT = 1
+    ACTION_SELECT = 2
+
     def __init__(self, col_offset, name, device_id, event_cb):
         self.name = name
         self.device_id = device_id
 
         # Init widgets
-        self.t = DoubleVar()
         self.col_offset = col_offset
         self.init_frame()
         self.init_temp()
@@ -379,9 +379,9 @@ class BrewControllerGui():
         self.btn_enable =  Checkbutton(self.frm, variable = self.enable, command = self.btn_enable_cb)
         self.btn_enable.config(text = "Enable", font = ("Purisa", 16))
         self.btn_enable.grid(row = 0, column = 1)
-        self.enable_all(0)
 
     def init_temp(self):
+        self.t = DoubleVar()
         self.temp = Label(self.frm, textvariable = self.t)
         self.temp.config(relief = FLAT, borderwidth = 5, font = ("Purisa", 50))
         self.temp.grid(row = 4, column = 0, columnspan = 1, rowspan = 5, stick = "w")
@@ -402,24 +402,25 @@ class BrewControllerGui():
  
     def init_control_btns(self):
         self.btn_var = IntVar()
-        self.btn_tc =  Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.tc, command = self.temp_btn_tc_cb)
+        self.btn_tc =  Radiobutton(self.frm, variable = self.btn_var, value = Gui.BTN_TC, command = self.temp_btn_tc_cb)
         self.btn_tc.config(text = "Temp Control", indicatoron = 0, font = ("Purisa", 17))
         self.btn_tc.grid(row = 10, column = 0, sticky = "we", columnspan = 2)
-        self.btn_pwm = Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.pwm, command = self.temp_btn_pwm_cb)
+        self.btn_pwm = Radiobutton(self.frm, variable = self.btn_var, value = Gui.BTN_PWM, command = self.temp_btn_pwm_cb)
         self.btn_pwm.config(text = "PWM", indicatoron = 0, font = ("Purisa", 17))
         self.btn_pwm.grid(row = 11, column = 0, sticky = "we", columnspan = 2)
 
-        self.btn_tc_delay =  Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.tc_delayed, command = self.temp_btn_tc_delay_cb)
+        self.btn_tc_delay =  Radiobutton(self.frm, variable = self.btn_var, value = Gui.BTN_TC_LATER, command = self.temp_btn_tc_delay_cb)
         self.btn_tc_delay.config(text = "Temp Control Later", indicatoron = 0, font = ("Purisa", 17))
         self.btn_tc_delay.grid(row = 12, column = 0, sticky = "we", columnspan = 2)
 
-        self.btn_pwm_delay = Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.pwm_delayed, command = self.temp_btn_pwm_delay_cb)
+        self.btn_pwm_delay = Radiobutton(self.frm, variable = self.btn_var, value = Gui.BTN_PWM_LATER, command = self.temp_btn_pwm_delay_cb)
         self.btn_pwm_delay.config(width = 25,text = "PWM Later ", indicatoron = 0, font = ("Purisa", 17))
         self.btn_pwm_delay.grid(row = 13, column = 0, sticky = "we", columnspan = 2)
 
-        self.btn_off = Radiobutton(self.frm, variable = self.btn_var, value = ControlMode.off, command = self.temp_btn_off_cb)
+        self.btn_off = Radiobutton(self.frm, variable = self.btn_var, value = Gui.BTN_OFF, command = self.temp_btn_off_cb)
         self.btn_off.config(width = 20,text = "Off", indicatoron = 0, font = ("Purisa", 17))
         self.btn_off.grid(row = 14, column = 0, sticky = "we", columnspan = 2, pady = (0,20)) 
+        self.btn_list = [self.btn_off, self.btn_tc, self.btn_pwm, self.btn_tc_delay, self.btn_pwm_delay]
         
     def init_temp_inputs(self):
         self.temp_target = IntVar()
@@ -441,20 +442,6 @@ class BrewControllerGui():
         self.input_delay_time.config(width = 5, font = ("Purisa", 15))
         self.input_delay_time.grid(row = 17, column = 1, sticky = "we")
 
-    def btn_tc_update(self, is_stopping):
-        self.btn_tc.select()
-        if (is_stopping):
-            self.btn_tc.config(text = "Temperature Control Stopping")
-        else:
-            self.btn_tc.config(text = "Temperature Control")
-
-    def btn_pwm_update(self, is_stopping):
-        self.btn_pwm.select()
-        if (is_stopping):
-            self.btn_pwm.config(text = "PWM Stopping")
-        else:
-            self.btn_pwm.config(text = "PWM")
-
     def set_tc_input_target(self, target):
         self.temp_target.set(target)
 
@@ -464,9 +451,6 @@ class BrewControllerGui():
     def set_input_delay_time(self, delay_time):
         self.delay_time.set(delay_time)
         
-    def btn_off_update(self):
-        self.btn_off.select()
-
     def temp_btn_tc_cb(self):
         self.event_cb(Events.btn_tc)
 
@@ -475,43 +459,6 @@ class BrewControllerGui():
 
     def temp_btn_pwm_cb(self):
         self.event_cb(Events.btn_pwm)
-
-    def btn_pwm_enable(self, enable):
-        if (enable):
-            self.btn_pwm.config(state = NORMAL)
-        else:
-            self.btn_pwm.config(state = DISABLED)
-
-    def btn_tc_enable(self, enable):
-        if (enable):
-            self.btn_tc.config(state = NORMAL)
-        else:
-            self.btn_tc.config(state = DISABLED)
-
-    def btn_tc_delay_enable(self, enable):
-        if (enable):
-            self.btn_tc_delay.config(state = NORMAL)
-        else:
-            self.btn_tc_delay.config(state = DISABLED) 
-
-    def btn_pwm_delay_enable(self, enable):
-        if (enable):
-            self.btn_pwm_delay.config(state = NORMAL)
-        else:
-            self.btn_pwm_delay.config(state = DISABLED) 
-
-    def enable_all(self, enable):
-        self.btn_pwm_enable(enable)
-        self.btn_tc_enable(enable)
-        self.btn_tc_delay_enable(enable)
-        self.btn_pwm_delay_enable(enable)
-
-        if (enable == 0):
-            self.btn_tc.deselect()
-            self.btn_pwm.deselect()
-            self.btn_pwm_delay.deselect()
-            self.btn_tc_delay.deselect()
-            self.btn_off.select()
 
     def btn_enable_cb(self):
         if (self.enable.get() == 1):
@@ -543,7 +490,6 @@ class BrewControllerGui():
                 return
             self.thermometer_sleep.sleep(1)
 
-
     def update_heat_status(self, heat_status):
         if (heat_status == 1):
             self.heat_status.set("heat on")
@@ -555,6 +501,22 @@ class BrewControllerGui():
     def update_timer_display(self, seconds):
         s = time.strftime("%H:%M:%S", time.gmtime(seconds))
         self.time_left.set(s)
+
+    def update_button(self, buttons, value, action):
+        for btn_idx in buttons:
+            if (action == self.ACTION_ENABLE):
+                if (value):
+                    self.btn_list[int(btn_idx)].config(state = NORMAL)
+                else:
+                    self.btn_list[int(btn_idx)].config(state = DISABLED)
+            elif (action == self.ACTION_TEXT):
+                self.btn_list[int(btn_idx)].config(text = value)
+            elif (action == self.ACTION_SELECT):
+                if (value == 1):
+                    self.btn_list[int(btn_idx)].select()
+                else:
+                    self.btn_list[int(btn_idx)].deselect()
+
 
 # Statemachine
 class Statemachine():
@@ -578,9 +540,9 @@ class BrewController():
     def __init__(self, **kwargs):
         # Init objects
         self.sm = Statemachine(ControlState.off, self.init_state)
-        self.gui = BrewControllerGui(kwargs['col_offset'], kwargs['name'], kwargs['device_id'] , self.process_event)
-        self.temp_controller = VariableTempControl(self.process_event, self.gui.update_heat_status, kwargs['device_id'], kwargs['pins'])
-        self.pwm_controller = PwmControl(self.process_event, self.gui.update_heat_status, kwargs['pins'])
+        self.gui = Gui(kwargs['col_offset'], kwargs['name'], kwargs['device_id'] , self.process_event)
+        self.temp_controller = VariableTempControl(self.process_event, self.process_event, kwargs['device_id'], kwargs['pins'])
+        self.pwm_controller = PwmControl(self.process_event, self.process_event, kwargs['pins'])
         self.pwm_delay_timer = Timer(self.process_event, self.process_event, self.gui.update_timer_display)
         self.tc_delay_timer = Timer(self.process_event, self.process_event, self.gui.update_timer_display)
 
@@ -600,7 +562,7 @@ class BrewController():
 
         # setpoint set events get processed no matter what state we are in.
         # So do these first
-
+        
         if (event == Events.set_tc):
            self.temp_controller.set_target(args[0])
            return
@@ -614,6 +576,13 @@ class BrewController():
         elif (event == Events.set_tc_delay_time):
            self.tc_delay_time = args[0]
            return
+
+        # Heat status events get processed no matter what state
+        # we ar in
+        if (event == Events.heat_on):
+           self.gui.update_heat_status(1)
+        else:
+            self.gui.update_heat_status(0)
 
         # Disable ans shutdown works from any state
         if (event == Events.disable):
@@ -676,66 +645,57 @@ class BrewController():
             if (event == Events.timer_stopped):
                 self.sm.next(ControlState.off)
 
-                
+
     def init_state(self):
         if (self.sm.state == ControlState.tc):
             self.temp_controller.start()
-            self.gui.btn_tc_update(0)
-            self.gui.btn_pwm_enable(0)
-            self.gui.btn_tc_delay_enable(0)
-            self.gui.btn_pwm_delay_enable(0)
+            self.gui.update_button(range(Gui.BTN_TC,Gui. BTN_PWM_LATER + 1), 0, Gui.ACTION_ENABLE)
+            self.gui.update_button([Gui.BTN_TC], 1, Gui.ACTION_SELECT)
             
         elif (self.sm.state == ControlState.tc_stopping):
             self.temp_controller.stop()
-            self.gui.btn_tc_update(1)
+            self.gui.update_button([Gui.BTN_TC], 0, Gui.ACTION_SELECT)
 
         elif (self.sm.state == ControlState.tc_delayed):
             self.tc_delay_timer.start(int(self.tc_delay_time) * 3600)
-            self.gui.btn_pwm_enable(0)
-            self.gui.btn_tc_enable(0)
-            self.gui.btn_pwm_delay_enable(0)
-            self.gui.btn_tc_delay_enable(1)
+            self.gui.update_button(range(Gui.BTN_TC,Gui. BTN_PWM_LATER + 1), 0, Gui.ACTION_ENABLE)
+            self.gui.update_button([Gui.BTN_TC_LATER], 1, Gui.ACTION_SELECT)
 
         elif (self.sm.state == ControlState.tc_delayed_stopping):
             self.tc_delay_timer.stop()
+            self.gui.update_button([Gui.BTN_TC_DELAYED], 0, Gui.ACTION_SELECT)
 
         elif (self.sm.state == ControlState.pwm):
             self.pwm_controller.start()
-            self.gui.btn_pwm_update(0)
-            self.gui.btn_tc_enable(0)
-            self.gui.btn_tc_delay_enable(0)
-            self.gui.btn_pwm_delay_enable(0)
+            self.gui.update_button(range(Gui.BTN_TC,Gui. BTN_PWM_LATER + 1), 0, Gui.ACTION_ENABLE)
+            self.gui.update_button([Gui.BTN_PWM], 1, Gui.ACTION_SELECT)
 
         elif (self.sm.state == ControlState.pwm_stopping):
             self.pwm_controller.stop()
-            self.gui.btn_pwm_update(1)
+            self.gui.update_button([Gui.BTN_PWM], 0, Gui.ACTION_SELECT)
 
         elif (self.sm.state == ControlState.pwm_delayed):
-            print "starting timer"
             self.pwm_delay_timer.start(int(self.pwm_delay_time)* 3600)
-            self.gui.btn_pwm_enable(0)
-            self.gui.btn_tc_enable(0)
-            self.gui.btn_pwm_delay_enable(1)
-            self.gui.btn_tc_delay_enable(0)           
+            self.gui.update_button(range(Gui.BTN_TC,Gui. BTN_PWM_LATER + 1), 0, Gui.ACTION_ENABLE)
+            self.gui.update_button([Gui.BTN_PWM_LATER], 1, Gui.ACTION_SELECT)
 
         elif (self.sm.state == ControlState.pwm_delayed_stopping):
             self.pwm_delay_timer.stop()
+            self.gui.update_button([Gui.BTN_PWM_LATER], 0, Gui.ACTION_SELECT)
 
         elif (self.sm.state == ControlState.off):
-            self.gui.btn_tc_update(0)
-            self.gui.btn_pwm_update(0)
-            self.gui.btn_off_update()
-            self.gui.enable_all(1)
+            self.gui.update_button([Gui.BTN_OFF], 1, Gui.ACTION_SELECT)
+            self.gui.update_button(range(Gui.BTN_TC,Gui. BTN_PWM_LATER + 1), 1, Gui.ACTION_ENABLE)
             self.gui.update_timer_display(0)
 
         elif (self.sm.state == ControlState.disabled):
-            self.gui.enable_all(0)
+            self.gui.update_button(range(Gui.BTN_TC,Gui. BTN_PWM_LATER + 1), 0, Gui.ACTION_ENABLE)
+            self.gui.update_button(range(Gui.BTN_TC,Gui. BTN_PWM_LATER + 1), 0, Gui.ACTION_SELECT)
             self.turn_off_everything()
 
         elif (self.sm.state == ControlState.shutting_down):
             self.turn_off_everything()
             self.gui.close()
-
 
     def turn_off_everything(self):
         self.temp_controller.stop()
@@ -774,5 +734,5 @@ if __name__ == "__main__":
     hlt = BrewController(col_offset = 0, name = "HLT", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12", pins = [3,4,5])
     kettle = BrewController(col_offset = 1, name = "Kettle", device_id = "28-0000042dd80d", tc_default = "95", pwm_default = "50", delay_time_default = "12", pins = [6,7,8])
     mt = BrewController(col_offset = 2, name = "Mash", device_id = "28-0000042dd80d", tc_default = "71", pwm_default = "50", delay_time_default = "12", pins = None)
-
+    
     root.mainloop()
