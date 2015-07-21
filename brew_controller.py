@@ -32,7 +32,7 @@ class Thermometer():
             return temperature
         except IOError:
             self.lock.release()
-            return 20
+            return 0
 
 # Heat control states
 class ControlState():
