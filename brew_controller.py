@@ -16,8 +16,10 @@ import os
 class Thermometer():
     def __init__(self, device_id):
         self.device_id = device_id
+        self.lock = threading.Lock()
 
     def read_temp(self):
+        self.lock.acquire()
         try:
             print "read temp"
             tfile = open("/sys/bus/w1/devices/" + self.device_id + "/w1_slave")
@@ -26,8 +28,10 @@ class Thermometer():
             secondline = text.split("\n")[1]
             temperaturedata = secondline.split(" ")[9]
             temperature = float(temperaturedata[2:])/1000
+            self.lock.release()
             return temperature
         except IOError:
+            self.lock.release()
             return 20
 
 # Heat control states
