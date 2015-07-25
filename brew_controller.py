@@ -603,7 +603,7 @@ class BrewController():
            return
 
         # Heat status events get processed no matter what state
-        # we ar in
+        # we are in
         if (event == Events.heat_on):
            self.gui.update_heat_status(1)
            return
@@ -611,7 +611,7 @@ class BrewController():
             self.gui.update_heat_status(0)
             return
 
-        # Disable ans shutdown works from any state
+        # Disable and shutdown works from any state
         if (event == Events.disable):
             self.sm.next(ControlState.disabled)
             return
