@@ -606,14 +606,18 @@ class BrewController():
         # we ar in
         if (event == Events.heat_on):
            self.gui.update_heat_status(1)
-        else:
+           return
+        elif (event == Events.heat_off):
             self.gui.update_heat_status(0)
+            return
 
         # Disable ans shutdown works from any state
         if (event == Events.disable):
             self.sm.next(ControlState.disabled)
+            return
         if (event == Events.shutdown):
             self.sm.next(ControlState.shutting_down)
+            return
 
         # Process events that depend on state
         if (self.sm.state == ControlState.disabled):
