@@ -10,6 +10,7 @@ import threading
 import thread
 import signal
 import os
+import Queue
 
 
 # 1-wire Thermometer
@@ -537,6 +538,10 @@ class Statemachine():
 
     state = property(get_state, next)
 
+class Event():
+    def __init__(self, id, args):
+        self.id = id
+        self.args = args
 
 # Brew controller incorpating temp control,
 # pwm and delay timer
@@ -544,11 +549,12 @@ class BrewController():
     def __init__(self, **kwargs):
         # Init objects
         self.sm = Statemachine(ControlState.off, self.init_state)
-        self.gui = Gui(kwargs['col_offset'], kwargs['name'], kwargs['device_id'] , self.process_event)
-        self.temp_controller = VariableTempControl(self.process_event, self.process_event, kwargs['device_id'], kwargs['pins'])
-        self.pwm_controller = PwmControl(self.process_event, self.process_event, kwargs['pins'])
-        self.pwm_delay_timer = Timer(self.process_event, self.process_event, self.gui.update_timer_display)
-        self.tc_delay_timer = Timer(self.process_event, self.process_event, self.gui.update_timer_display)
+        self.gui = Gui(kwargs['col_offset'], kwargs['name'], kwargs['device_id'] , self.queue_event)
+        self.temp_controller = VariableTempControl(self.queue_event, self.queue_event, kwargs['device_id'], kwargs['pins'])
+        self.pwm_controller = PwmControl(self.queue_event, self.queue_event, kwargs['pins'])
+        self.pwm_delay_timer = Timer(self.queue_event, self.queue_event, self.gui.update_timer_display)
+        self.tc_delay_timer = Timer(self.queue_event, self.queue_event, self.gui.update_timer_display)
+        self.event_queue = Queue.Queue()
 
         # Init defaults
         self.default_tc_target = kwargs['tc_default']
@@ -562,7 +568,22 @@ class BrewController():
         # Init state
         self.sm.next(ControlState.disabled)
 
-    def process_event(self, event, *args):
+        # Start event thread
+        self.run = 1
+        self.th = Thread(target = self.process_queue)
+        self.th.start()
+
+    def queue_event(self, event, *args):
+        self.event_queue.put(Event(event, args))
+
+    def process_queue(self):
+        while self.run:
+            while not self.event_queue.empty():
+                e = self.event_queue.get()
+                self.process_event(e.id, e.args)
+            time.sleep(0.25)
+
+    def process_event(self, event, args):
 
         # setpoint set events get processed no matter what state we are in.
         # So do these first
@@ -729,7 +750,7 @@ if __name__ == "__main__":
                 return
         # We are ready to close
         for c in cntrs:
-            c.process_event(Events.shutdown)
+            c.queue_event(Events.shutdown)
 
         root.quit()
 
