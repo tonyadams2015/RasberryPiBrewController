@@ -723,6 +723,7 @@ class BrewController():
             self.turn_off_everything()
 
         elif (self.sm.state == ControlState.shutting_down):
+            self.run = 0
             self.turn_off_everything()
             self.gui.close()
 
