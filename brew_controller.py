@@ -24,16 +24,17 @@ class Thermometer():
     def read_temp(self):
         self.lock.acquire()
         try:
-            print "read temp"
             tfile = open("/sys/bus/w1/devices/" + self.device_id + "/w1_slave")
             text = tfile.read()
             tfile.close()
             secondline = text.split("\n")[1]
             temperaturedata = secondline.split(" ")[9]
             temperature = float(temperaturedata[2:])/1000
+            logger.info("Read temp for %s %d" % (self.device_id, temperature))
             self.lock.release()
             return temperature
         except IOError:
+            logger.info ("Temp read failed for %s" % (self.device_id))
             self.lock.release()
             return 0
 
@@ -95,7 +96,7 @@ class Elements:
         try:
             self.pifacedigital = pifacedigitalio.PiFaceDigital()
         except NameError:
-            print "pifacedigital is not available on this platform"
+            logger.info ("pifacedigital is not available on this platform")
 
     def turn_on(self):
         if (self.turned_on == 0):
@@ -104,8 +105,8 @@ class Elements:
                     self.pifacedigital.output_pins[pin].turn_on()
                     time.sleep(0.05)
             except AttributeError:
-                print "pifacedigital is not available on this platform"
-        print "turn heat on"
+                logger.info ("pifacedigital is not available on this platform")
+        logger.info ("turn heat on")
         self.turned_on = 1
         self.heat_cb(Events.heat_on)
 
@@ -117,8 +118,8 @@ class Elements:
                     self.pifacedigital.output_pins[pin].turn_off()
                     time.sleep(0.05)
             except AttributeError:
-                print "pifacedigital is not available on this platform"
-            print "turning heat off"
+                logger.info ("pifacedigital is not available on this platform")
+            logger.info ("turning heat off")
         self.heat_cb(Events.heat_off)
 
     def interruptable_sleep(self, delay):
@@ -137,7 +138,7 @@ class PwmElements(Elements):
     def run(self, period, duty_cycle):
         self.int_sleep.clear()
         self.turn_on()
-        print "pwm on time = " + str(duty_cycle * period)
+        logger.info ("pwm on time = " + str(duty_cycle * period))
         self.interruptable_sleep(duty_cycle * period)
 
         if (duty_cycle == 1):
@@ -147,7 +148,7 @@ class PwmElements(Elements):
 
         if (self.latch != 1):
             self.turn_off()
-            print "pwm off time = " + str((1 - duty_cycle) * period)
+            logger.info ("pwm off time = " + str((1 - duty_cycle) * period))
             self.interruptable_sleep((1 - duty_cycle) * period)
             self.turn_off()
 
@@ -165,14 +166,14 @@ class Controller():
         try:
             self.pifacedigital = pifacedigitalio.PiFaceDigital()
         except NameError:
-            print "pifacedigital is not available on this platform"
+            logger.info ("pifacedigital is not available on this platform")
 
     def set_target(self, target):
         self.target = target
-        print "set target " + str(target)
+        logger.info ("set target " + str(target))
   
     def start(self):
-        print "starting"
+        logger.info ("starting")
         self.mode = ControlState.on
 
         # Start control thread
@@ -186,7 +187,7 @@ class Controller():
         self.actuate_thread.start()
 
     def stop(self):
-        print "stopping"
+        logger.info ("stopping")
         self.mode = ControlState.off
         self.control_sleep.interrupt()
         self.actuator_sleep.interrupt()
@@ -203,7 +204,7 @@ class Controller():
     def actuate_run(self):
         if(1):
             while (self.mode == ControlState.on):
-                print "actuate"
+                logger.info ("actuate")
                 try:
                     self.actuate()
                 except:
@@ -212,11 +213,11 @@ class Controller():
             self.stopped_cb(Events.controller_stopped)
 
     def control(self):
-        #print "control() not implemented"
+        logger.error ("control() not implemented")
         self.control_sleep.sleep(1)
 
     def actuate(self):
-        print "actuate() not implemented"
+        logger.error ("actuate() not implemented")
 
     def cancel_actuator(self):
         self.actuator.interrupt_sleep()
@@ -232,7 +233,7 @@ class TempControl(Controller):
 
     def control(self):
         self.temp = self.thermometer.read_temp()
-        print self.temp
+        debug.log ("temp %d" % (self.temp))
         if ((self.temp + self.deadband) < self.target):
             self.control_decision = 1 
         else:
@@ -240,7 +241,7 @@ class TempControl(Controller):
         self.control_sleep.sleep(1)
 
     def actuate(self):
-        print "actuate"
+        logger.info ("actuate")
         if (self.control_decision == 1):
             self.actuator.turn_on()
         else:
@@ -258,7 +259,7 @@ class PwmControl(Controller):
 
     def set_duty_cycle(self, duty_cycle):
         self.duty_cycle = duty_cycle
-        print "set duty_cycle " + str(duty_cycle)
+        logger.info ("set duty_cycle " + str(duty_cycle))
 
     def actuate(self):
         self.actuator.run(self.period, self.duty_cycle)
@@ -274,8 +275,8 @@ class VariableTempControl(PwmControl):
         
     def control(self):
         self.temp = self.thermometer.read_temp()
-        print self.temp
-        print self.target
+        debug_log ("temp %d" % (self.temp))
+        debug_log ("target %d" % (self.target))
         if ((self.temp + self.deadband) < self.target):
             self.control_decision = 1 
         else:
@@ -299,13 +300,13 @@ class Timer():
         self.timer_update_cb = timer_update_cb
 
     def start(self, seconds):
-        print "delay timer starting"
+        logger.info ("delay timer starting")
         self.seconds = seconds
         self.t = Thread(target = self.timer)
         self.t.start()
 
     def stop(self):
-        print "stop delay timer"
+        logger.info ("stop delay timer")
         self.seconds = 0
         self.stopped_cb(Events.timer_stopped)
  
@@ -318,13 +319,13 @@ class Timer():
     def timer(self):
         while (self.seconds > 0):
             time.sleep(1)
-            print self.seconds
+            logger.info ("second %d" % (sself.seconds))
             self.seconds -= 1
             self.timer_update_cb(self.seconds)
 
             # Let the man upstairs know that the timer has expired
             if (self.seconds == 0):
-                print "timer expiring"
+                logger.info ("timer expiring")
                 self.expire_cb(Events.
                                timer_expired)
 
