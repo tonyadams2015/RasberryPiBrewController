@@ -11,6 +11,8 @@ import thread
 import signal
 import os
 import Queue
+import inspect
+import logging
 
 
 # 1-wire Thermometer
@@ -758,6 +760,33 @@ if __name__ == "__main__":
             c.queue_event(Events.shutdown)
 
         root.quit()
+
+    # create logger
+    logger = logging.getLogger('brew controller')
+    logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler('debug.log')
+    fh.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+
+    def debug_log(message):
+        "Automatically log the current function details."
+        # Get the previous frame in the stack, otherwise it would
+        # be this function!!!
+        func = inspect.currentframe().f_back.f_code
+        # Dump the message + the name of this function to the log.
+        logger.debug("%s: %s in %s:%i" % (
+            message, 
+            func.co_name, 
+            func.co_filename, 
+            func.co_firstlineno
+        ))
 
     root = Tk()
     root.protocol("WM_DELETE_WINDOW", close)
