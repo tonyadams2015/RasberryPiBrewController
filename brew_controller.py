@@ -19,6 +19,7 @@ import logging
 class Thermometer():
     def __init__(self, device_id):
         self.device_id = device_id
+        self.last_temp = 0.0;
         self.lock = threading.Lock()
 
     def read_temp(self):
@@ -31,14 +32,22 @@ class Thermometer():
             temperaturedata = secondline.split(" ")[9]
             temperature = float(temperaturedata[2:])/1000
             logger.info("Read temp for %s %d" % (self.device_id, temperature))
+
+            # Debug to check for a bad reading or instability
+            func = inspect.currentframe().f_back.f_code
+            if (abs(temperature - self.last_temp) > 5):
+                logger.error ("Temp instability in  %s at %d for %s last reading %d this reading %d" % (func.co_name, func.co_firstlineno, self.device_id, self.last_temp, temperature))
+
+            self.last_temp = temperature
             self.lock.release()
             return temperature
         except IOError:
             logger.info ("Temp read failed for %s" % (self.device_id))
+            temperature = 0
             self.lock.release()
             return 0
 
-# Heat control states
+# Heat control states   
 class ControlState():
     off = 0
     on = 1
@@ -272,11 +281,20 @@ class VariableTempControl(PwmControl):
         self.thermometer = Thermometer(device_id)
         self.deadband = 0.5
         self.control_decision = 0
+        self.last_temp = 0.0
         
     def control(self):
         self.temp = self.thermometer.read_temp()
         debug_log ("temp %d" % (self.temp))
         debug_log ("target %d" % (self.target))
+
+        # Debug code for detecting temperature instability
+        func = inspect.currentframe().f_back.f_code
+        if (abs(self.temp - self.last_temp) > 5):
+            logger.error ("Temp instability in  %s at %d last reading %d this reading %d" % (func.co_name, func.co_firstlineno, self.last_temp, self.temp))
+
+        self.last_temp = self.temp
+
         if ((self.temp + self.deadband) < self.target):
             self.control_decision = 1 
         else:
@@ -764,16 +782,20 @@ if __name__ == "__main__":
 
     # create logger
     logger = logging.getLogger('brew controller')
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.ERROR)
     fh = logging.FileHandler('debug.log')
     fh.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
+    n = logging.StreamHandler()
+    n.setLevel(logging.ERROR)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
     ch.setFormatter(formatter)
+    n.setFormatter(formatter)
     logger.addHandler(fh)
     logger.addHandler(ch)
+    logger.addHandler(n)
 
 
     def debug_log(message):
